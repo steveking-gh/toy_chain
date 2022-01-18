@@ -2,6 +2,7 @@ use blake3;
 use bincode;
 use chrono::prelude::*;
 
+const HASH_BYTE_SIZE :usize = 32;
 #[derive(Debug, Clone)]
 pub struct BlockHeader {
     /// The nonce is an arbitrary value that cause the hash of the
@@ -110,7 +111,7 @@ impl ToyChain {
             let hash_bytes = hash.as_bytes();
             let mut hash_good = true;
             for (byte_num, mask) in self.difficulty_mask.iter().enumerate() {
-                if (hash_bytes[31 - byte_num] & mask) != 0 {
+                if (hash_bytes[HASH_BYTE_SIZE - 1 - byte_num] & mask) != 0 {
                     hash_good = false;
                     break;
                 }
