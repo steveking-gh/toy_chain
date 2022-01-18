@@ -2,14 +2,19 @@ use blake3;
 use bincode;
 use chrono::prelude::*;
 
-// Very annoying that we can just derive Serialize for the entire header.
-// The problem is that blake3 does not support serde operations.
 #[derive(Debug, Clone)]
 pub struct BlockHeader {
-    // The nonce has to come at the start (or very near) of the hash
-    // otherwise, the difficulty of finding a good nonce is too low.
+    /// The nonce is an arbitrary value that cause the hash of the
+    /// entire block to meet our difficulty requirement, i.e. number
+    /// of leading zeros. The nonce should come at the start (or very
+    /// near) of the block to prevent bulk pre-hashing of block
+    /// content and making nonce calculations too easy.
     pub nonce : u64,
+
+    /// Timestamp when block header was created.
     pub ts : chrono::DateTime<Utc>,
+
+    /// Hash of the previous block in the chain.
     pub prev_hash : blake3::Hash,
 }
 
@@ -18,20 +23,27 @@ impl BlockHeader {
         BlockHeader{ nonce: 0, ts: Utc::now(), prev_hash }
     }
 
+    /// Update the running hash with this header content.
     pub fn hash_update(&self, hasher: &mut blake3::Hasher) {
-        // Would rather do this, but see comment for header struct:
-        // hasher.update(&bincode::serialize(&self.header).unwrap());
+        // Very annoying that we cannot just derive Serialize for the
+        // entire header. The problem is that blake3 does not support
+        // serde. Neither does SHA2 or any hash using the digest
+        // interface.  SHA1 seems to be only one supporting serde.
+        // Would rather do this:
+        // hasher.update(&bincode::serialize(&self).unwrap());
         hasher.update(&bincode::serialize(&self.nonce).unwrap());
         hasher.update(&bincode::serialize(&self.ts).unwrap());
         hasher.update(self.prev_hash.as_bytes());
     }
 
+    /// Incrment the nonce in anticipation of another hash attempt.
     pub fn increment_nonce(&mut self) {
         self.nonce += 1;
     }
 }
 
 #[derive(Debug, Clone)]
+/// The block over which the block chain creates a hash value.
 pub struct Block {
     pub header: BlockHeader,
     pub data: String,
@@ -42,6 +54,8 @@ impl Block {
         Block{ header: BlockHeader::new(prev_hash), data: msg.to_owned() }
     }
 
+    /// Calculate the hash for this block.  Does NOT check if the hash
+    /// meets the required difficulty.
     pub fn get_hash(&self, hasher: &mut blake3::Hasher) -> blake3::Hash {
         hasher.reset();
         self.header.hash_update(hasher);
@@ -49,6 +63,7 @@ impl Block {
         hasher.finalize()
     }
 
+    /// Increment the nonce in anticipation of another hash attempt.
     pub fn increment_nonce(&mut self) {
         self.header.increment_nonce();
     }
@@ -69,23 +84,30 @@ impl ChainEntry {
 pub struct ToyChain {
     pub chain: std::vec::Vec<ChainEntry>,
 
-    /// The number of leading zero bits required in the hash
+    /// The number of leading zero bits required in the hash represented
+    /// as a bit mask.
     /// Ignored for the genesis block.
     pub difficulty_mask: [u8; 4],
+
+    /// The qualified hash value of the last block in the chain.
+    pub last_block_hash: blake3::Hash,
 }
 
 impl ToyChain {
     pub fn new() -> Self {
         // Start with 8 leading zero bits in the hash as our difficulty.
         // We brute force the nonce until the hash meets this requirement.
-        let mut tc = ToyChain { chain: Vec::new(), difficulty_mask: [0xFF, 0xFF, 0x00, 0]};
+        let mut tc = ToyChain { chain: Vec::new(),
+                difficulty_mask: [0xFF, 0xFF, 0x00, 0],
+                last_block_hash: blake3::hash(b"The genesis hash.")};
         tc.add_first_block();
         tc
     }
 
     pub fn add_first_block(&mut self) {
         let msg= "The genesis message.";
-        let blk = Block::new(msg, blake3::hash(b"The genesis hash."));
+        let blk = Block::new(msg, self.last_block_hash);
+        self.last_block_hash = blake3::hash(msg.as_bytes());
         self.chain.push( ChainEntry::new(blk,blake3::hash(msg.as_bytes())));
     }
 

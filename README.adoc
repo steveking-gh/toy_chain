@@ -1,0 +1,5 @@
+= Toy Chain
+:last-update-label!: /* Turn off update time in footer */
+
+Toy Chain is just a tiny project to play with principles of a
+proof-of-work blockchain.
