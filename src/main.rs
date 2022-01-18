@@ -69,20 +69,8 @@ impl Block {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ChainEntry {
-    blk: Block,
-    hash: blake3::Hash,
-}
-
-impl ChainEntry {
-    pub fn new(blk: Block, hash: blake3::Hash) -> Self {
-        ChainEntry{ blk, hash }
-    }
-}
-
 pub struct ToyChain {
-    pub chain: std::vec::Vec<ChainEntry>,
+    pub chain: std::vec::Vec<Block>,
 
     /// The number of leading zero bits required in the hash represented
     /// as a bit mask.
@@ -108,9 +96,11 @@ impl ToyChain {
         let msg= "The genesis message.";
         let blk = Block::new(msg, self.last_block_hash);
         self.last_block_hash = blake3::hash(msg.as_bytes());
-        self.chain.push( ChainEntry::new(blk,blake3::hash(msg.as_bytes())));
+        self.chain.push(blk);
     }
 
+    /// Iterate on the nonce until we have get a hash for this block
+    /// that meets the difficulty requirements.
     pub fn get_qualified_hash(&self, blk: &mut Block) -> blake3::Hash {
         let mut hasher = blake3::Hasher::new();
         let mut hash = blk.get_hash(&mut hasher);
@@ -138,9 +128,9 @@ impl ToyChain {
 
     pub fn add_msg(&mut self, msg: &str) {
         // The chain is guaranteed to have at least the genesis block
-        let mut blk = Block::new(msg, self.chain.last().unwrap().hash);
-        let hash = self.get_qualified_hash(&mut blk);
-        self.chain.push(ChainEntry::new(blk, hash));
+        let mut blk = Block::new(msg, self.last_block_hash);
+        self.last_block_hash = self.get_qualified_hash(&mut blk);
+        self.chain.push(blk);
     }
 }
 
@@ -159,8 +149,7 @@ fn main() {
         chain.add_msg(msg);
     }
 
-    for ce in chain.chain {
-        println!("Chain entry block = {:?}", ce.blk);
-        println!("             hash = {:?}", ce.hash);
+    for blk in chain.chain {
+        println!("Chain entry block = {:?}", blk);
     }
 }
